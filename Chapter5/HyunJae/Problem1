@@ -1,0 +1,117 @@
+// TCPServerFixed.cpp 
+
+#include "stdafx.h"
+#include "../../networkHelper.h"
+#include <iostream>
+
+using namespace std;
+
+
+int recvn(SOCKET s, char* buf, int len, int flags)
+{
+	int received;
+	char* ptr = buf;
+	int left = len;
+
+	while (left > 0)
+	{
+		received = recv(s, ptr, left, flags);
+		if (received == SOCKET_ERROR)
+		{
+			return SOCKET_ERROR;
+		}
+		else if (received == 0)
+		{
+			break;
+		}
+		left -= received;
+		ptr += received;
+	}
+	return (len - left);
+}
+int main(int argc, char* argv[])
+{
+	int retval;
+
+	WSADATA wsa;
+
+	if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
+	{
+		return 1;
+	}
+	SOCKET listen_sock = socket(AF_INET, SOCK_STREAM, 0);
+	if (listen_sock == INVALID_SOCKET)
+	{
+		err_quit(L"socket()");
+	}
+
+	SOCKADDR_IN serveraddr;
+	ZeroMemory(&serveraddr, sizeof(serveraddr));
+	serveraddr.sin_family = AF_INET;
+	serveraddr.sin_addr.S_un.S_addr = htonl(INADDR_ANY);
+	serveraddr.sin_port = htons(SERVERPORT);
+	retval = bind(listen_sock, (SOCKADDR*)&serveraddr, sizeof(serveraddr));
+	if (retval == SOCKET_ERROR)
+	{
+		err_quit(L"bind()");
+	}
+
+	retval = listen(listen_sock, SOMAXCONN);
+
+	if (retval == SOCKET_ERROR)
+	{
+		err_quit(L"Listen()");
+	}
+
+	SOCKET client_sock;
+	SOCKADDR_IN clientaddr;
+	int addrlen;
+	char buf[BUFSIZE + 1];
+
+	while (1)
+	{
+		addrlen = sizeof(clientaddr);
+		client_sock = accept(listen_sock, (SOCKADDR*)&clientaddr, &addrlen);
+		if (client_sock == INVALID_SOCKET)
+		{
+			err_display(L"accept");
+			break;
+		}
+		char dest[INET_ADDRSTRLEN];
+		printf("\n[TCP server] client connected: ip address=%s, port num =%d\n",
+			inet_ntop(AF_INET,&clientaddr.sin_addr, dest,INET_ADDRSTRLEN),ntohs(clientaddr.sin_port));
+
+
+		char sendBuf[BUFSIZE];
+		while (1)
+		{
+			retval = recvn(client_sock, buf, BUFSIZE, 0);
+			if (retval == SOCKET_ERROR)
+			{
+				err_display(L"recv");
+				break;
+			}
+			else if (retval == 0)
+			{
+				break;
+			}
+			
+			buf[retval] = '\0';
+
+			printf("[TCP/%s:%d]%s\n", inet_ntop(AF_INET, &clientaddr.sin_addr, dest, INET_ADDRSTRLEN), ntohs(clientaddr.sin_port), buf);
+
+
+			cin >> sendBuf;
+			retval = send(client_sock, sendBuf, BUFSIZE, 0);
+		}
+
+		closesocket(client_sock);
+		printf("[TCP server] client connection ended: ip address=%s port= %d\n", inet_ntop(AF_INET, &clientaddr.sin_addr, dest, INET_ADDRSTRLEN),
+			ntohs(clientaddr.sin_port));
+	}
+
+	closesocket(listen_sock);
+	WSACleanup();
+    return 0;
+}
+
